@@ -102,7 +102,7 @@ func ray_vs_sphere(ray: Ray, sphere: Sphere): Hit =
 
 # Math
 func clamp*[T](a: T, lo: T, hi: T): T =
-  if a < lo: a
+  if a < lo: lo
   elif hi < a: hi
   else: a
 
@@ -124,7 +124,7 @@ proc write_image(image: Image) =
   for r in image:
     for p in r:
       f.write render_pixel(p)
-      f.write " "
+      f.write "   "
     f.write "\n"
 
 proc main() =
@@ -144,10 +144,16 @@ proc main() =
           jitter = v_scale(v_random_direction(), 1.0 / float(IMAGE_SIZE.width + IMAGE_SIZE.height))
           ray = make_ray(v_zero(), v_add((x: 2.0 * float(xi) / float(IMAGE_SIZE.width) - 1.0, y: 2.0 * float(yi) / float(IMAGE_SIZE.height) - 1.0, z: -1.0), jitter))
           current = image[xi][yi]
-          sky = (0.1, 0.1, 0.1)
+          sun_dir = v_normalize((1.0, 1.0, -1.0))
+          sky_color = (0.2, 0.2, 0.2)
+          sphere_color = (1.0, 0.0, 0.0)
           hit = ray_vs_sphere(ray, sphere)
-          c = if hit.valid: v_add(hit.normal, v_unit())
-              else: sky
+          c = if hit.valid:
+                let
+                  l = clamp(v_dot(sun_dir, hit.normal), 0.0, 1.0)
+                v_scale(hit.normal, l)
+              else:
+                sky_color
         image[xi][yi] = v_add(current, c)
       image[xi][yi] = v_scale(image[xi][yi], 1.0 / float(NUM_SAMPLES))
 
