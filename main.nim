@@ -135,14 +135,15 @@ proc main() =
         samples: array[NUM_SAMPLES, Pixel]
       for s in 0..NUM_SAMPLES-1:
         let
-          jitter = v_scale(v_random_direction(), 100.0 / float(IMAGE_SIZE.width * IMAGE_SIZE.height))
+          jitter = v_scale(v_random_direction(), 1.0 / float(IMAGE_SIZE.width + IMAGE_SIZE.height))
           ray = make_ray(v_zero(), v_add((x: 2.0 * float(xi) / float(IMAGE_SIZE.width) - 1.0, y: 2.0 * float(yi) / float(IMAGE_SIZE.height) - 1.0, z: -1.0), jitter))
           current = image[xi][yi]
         image[xi][yi] =
-          if ray_vs_sphere(ray, sphere).valid:
-            v_add(current, (1.0, 0.0, 0.0))
+          v_add(current, if ray_vs_sphere(ray, sphere).valid:
+            (1.0, 0.0, 0.0)
           else:
-            v_add(current, (0.0, 1.0, 0.0))
+            (0.0, 1.0, 0.0)
+          )
       image[xi][yi] = v_scale(image[xi][yi], 1.0 / float(NUM_SAMPLES))
 
   echo "Writing file"
