@@ -27,34 +27,37 @@ type
   Image = array[IMAGE_SIZE.width, array[IMAGE_SIZE.height, Pixel]] 
 
 # Vector
-proc v_unit(): V =
+func v_unit(): V =
   (x: 1.0, y: 1.0, z: 1.0)
 
-proc v_zero(): V =
+func v_zero(): V =
   (x: 0.0, y: 0.0, z: 0.0)
 
-proc v_add(a: V, b: V): V =
+func v_add(a: V, b: V): V =
   (x: a.x + b.x, y: a.y + b.y, z: a.z + b.z)
 
-proc v_scale(a: V, f: float): V =
+func v_scale(a: V, f: float): V =
   (x: f * a.x, y: f * a.y, z: f * a.z)
 
-proc v_neg(a: V): V =
+func v_neg(a: V): V =
   v_scale(a, -1.0)
 
-proc v_sub(a: V, b: V): V =
+func v_sub(a: V, b: V): V =
   v_add(a, v_neg(b))
 
-proc v_dot(a: V, b: V): float =
+func v_dot(a: V, b: V): float =
   a.x * b.x + a.y * b.y + a.z * b.z
 
-proc v_length_sq(a: V): float =
+func v_prod(a: V, b: V): V =
+  (a.x * b.x, a.y * b.y, a.z * b.z)
+
+func v_length_sq(a: V): float =
   v_dot(a, a)
 
-proc v_length(a: V): float =
+func v_length(a: V): float =
   sqrt(v_length_sq(a))
 
-proc v_normalize(a: V): V =
+func v_normalize(a: V): V =
   v_scale(a, 1.0 / v_length(a))
 
 proc v_random(): V =
@@ -69,16 +72,16 @@ proc v_random_direction(): V =
   if l <= 1.0: v_scale(v, 1.0 / l)
   else: v_random_direction()
 
-proc empty_hit(): Hit =
+func empty_hit(): Hit =
   var
     hit: Hit
   hit.valid = false
   return hit
 
-proc make_ray(origin: V, direction: V): Ray =
+func make_ray(origin: V, direction: V): Ray =
   (origin: origin, direction: v_normalize(direction))
 
-proc ray_vs_sphere(ray: Ray, sphere: Sphere): Hit =
+func ray_vs_sphere(ray: Ray, sphere: Sphere): Hit =
   let
     oc = v_sub(ray.origin, sphere.pos)
     b = 2.0 * v_dot(oc, ray.direction)
@@ -92,7 +95,7 @@ proc ray_vs_sphere(ray: Ray, sphere: Sphere): Hit =
 
 
 # Math
-proc clamp*[T](a: T, lo: T, hi: T): T =
+func clamp*[T](a: T, lo: T, hi: T): T =
   if a < lo: a
   elif hi < a: hi
   else: a
@@ -102,10 +105,10 @@ proc write_image(image: Image) =
   let f = open("output.ppm", fmWrite)
   defer: f.close()
 
-  proc render_float(x: float): int =
+  func render_float(x: float): int =
     clamp(int(x * 255.0), 0, 255)
 
-  proc render_pixel(p: Pixel): string =
+  func render_pixel(p: Pixel): string =
     fmt"{render_float(p.x)} {render_float(p.y)} {render_float(p.z)}"
 
   f.write "P3\n"
