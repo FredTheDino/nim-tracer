@@ -19,7 +19,7 @@ const
 type
   V = tuple[x: float, y: float, z: float]
   #
-  Hit = tuple[at: V, t: float, valid: bool]
+  Hit = tuple[at: V, normal: V, t: float, valid: bool]
   Sphere = tuple[pos: V, radius: float]
   Ray = tuple[origin: V, direction: V]
   #
@@ -90,8 +90,14 @@ func ray_vs_sphere(ray: Ray, sphere: Sphere): Hit =
   if d < 0.0:
     return empty_hit()
   let
-    t = (-b - sqrt(d)) / 2.0
-  return (at: v_add(ray.origin, v_scale(ray.direction, t)), t: t, valid: true);
+    t_a = (-b - sqrt(d)) / 2.0
+    t_b = (-b + sqrt(d)) / 2.0
+    t = if t_a > 0: t_a
+        else: t_b
+    at = v_add(ray.origin, v_scale(ray.direction, t))
+    normal = v_normalize(v_sub(sphere.pos, at))
+    valid = t > 0.0
+  return (at, normal, t, valid)
 
 
 # Math
@@ -126,7 +132,7 @@ proc main() =
     image: Image
 
   let
-    sphere = (pos: (0.0, 0.0, -5.0), radius: 1.0)
+    sphere = (pos: (1.0, 0.0, -5.0), radius: 2.0)
   echo "Rendering file"
   for xi in 0..IMAGE_SIZE.width-1:
     for yi in 0..IMAGE_SIZE.height-1:
@@ -138,12 +144,11 @@ proc main() =
           jitter = v_scale(v_random_direction(), 1.0 / float(IMAGE_SIZE.width + IMAGE_SIZE.height))
           ray = make_ray(v_zero(), v_add((x: 2.0 * float(xi) / float(IMAGE_SIZE.width) - 1.0, y: 2.0 * float(yi) / float(IMAGE_SIZE.height) - 1.0, z: -1.0), jitter))
           current = image[xi][yi]
-        image[xi][yi] =
-          v_add(current, if ray_vs_sphere(ray, sphere).valid:
-            (1.0, 0.0, 0.0)
-          else:
-            (0.0, 1.0, 0.0)
-          )
+          sky = (0.1, 0.1, 0.1)
+          hit = ray_vs_sphere(ray, sphere)
+          c = if hit.valid: v_add(hit.normal, v_unit())
+              else: sky
+        image[xi][yi] = v_add(current, c)
       image[xi][yi] = v_scale(image[xi][yi], 1.0 / float(NUM_SAMPLES))
 
   echo "Writing file"
