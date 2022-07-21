@@ -133,20 +133,21 @@ proc main() =
 
   let
     sphere = (pos: (1.0, 0.0, -5.0), radius: 2.0)
+
+    sun_dir = v_normalize((1.0, 1.0, -1.0))
+    sky_color = (0.2, 0.2, 0.2)
+    sphere_color = (1.0, 0.0, 0.0)
+
   echo "Rendering file"
   for xi in 0..IMAGE_SIZE.width-1:
     for yi in 0..IMAGE_SIZE.height-1:
 
       var
-        samples: array[NUM_SAMPLES, Pixel]
+        current: Pixel
       for s in 0..NUM_SAMPLES-1:
         let
           jitter = v_scale(v_random_direction(), 1.0 / float(IMAGE_SIZE.width + IMAGE_SIZE.height))
           ray = make_ray(v_zero(), v_add((x: 2.0 * float(xi) / float(IMAGE_SIZE.width) - 1.0, y: 2.0 * float(yi) / float(IMAGE_SIZE.height) - 1.0, z: -1.0), jitter))
-          current = image[xi][yi]
-          sun_dir = v_normalize((1.0, 1.0, -1.0))
-          sky_color = (0.2, 0.2, 0.2)
-          sphere_color = (1.0, 0.0, 0.0)
           hit = ray_vs_sphere(ray, sphere)
           c = if hit.valid:
                 let
@@ -154,8 +155,8 @@ proc main() =
                 v_scale(hit.normal, l)
               else:
                 sky_color
-        image[xi][yi] = v_add(current, c)
-      image[xi][yi] = v_scale(image[xi][yi], 1.0 / float(NUM_SAMPLES))
+        current = v_add(current, c)
+      image[xi][yi] = v_scale(current, 1.0 / float(NUM_SAMPLES))
 
   echo "Writing file"
   write_image(image)
