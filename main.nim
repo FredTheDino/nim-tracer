@@ -56,7 +56,7 @@ type
     pos: V
     radius: float
     material: Material
-  
+
   Plane = object
     pos: V
     normal: V
@@ -175,7 +175,8 @@ proc ray_bounce(ray: Ray, hit: Hit): Ray =
     random_dir = v_random_direction()
     refraction = if v_dot(hit.normal, random_dir) > 0: random_dir
                  else: v_neg(random_dir)
-    direction = v_normalize(v_mix(reflection, refraction, hit.material.roughness))
+    direction = v_normalize(v_mix(reflection, refraction,
+        hit.material.roughness))
     origin = v_add(hit.at, v_scale(hit.normal, 0.00001))
   Ray(origin: origin, direction: direction)
 
@@ -212,7 +213,8 @@ proc generate_ray(xi: int, yi: int): Ray =
     w = 1.0 / float(IMAGE_SIZE.width + IMAGE_SIZE.height)
     jitter = v_scale((cos(t), sin(t), 0.0), w)
     #
-    r = float(IMAGE_SIZE.width) / (float(IMAGE_SIZE.width) * float(IMAGE_SIZE.height))
+    r = float(IMAGE_SIZE.width) / (float(IMAGE_SIZE.width) * float(
+        IMAGE_SIZE.height))
     x = r * (float(xi) - (IMAGE_SIZE.width / 2))
     y = r * (float(yi) - (IMAGE_SIZE.height / 2))
     z = -1.0
@@ -240,11 +242,11 @@ proc sample(ray: Ray, world: World, bounces: int): Pixel =
       hit = closest_hit
       next_ray = ray_bounce(ray, hit)
       next_sample = sample(next_ray, world, bounces - 1)
-    v_mix( v_prod(v_scale(next_sample, 0.95), hit.material.color)
+    v_mix(v_prod(v_scale(next_sample, 0.95), hit.material.color)
          , hit.material.color
          , hit.material.emitter
          )
-          
+
 
 
 proc main() =
