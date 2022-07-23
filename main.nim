@@ -13,15 +13,34 @@ import std/random
 #  - Better color combining
 
 const
-  IMAGE_SIZE = (width: 200, height: 200)
-  NUM_SAMPLES = 100
+  IMAGE_SIZE = (width: 300, height: 300)
+  NUM_SAMPLES = 10
 
 type
   V = tuple[x: float, y: float, z: float]
   #
-  Hit = tuple[at: V, normal: V, t: float, valid: bool]
-  Sphere = tuple[pos: V, radius: float]
-  Ray = tuple[origin: V, direction: V]
+  Hit* = object
+    at: V
+    normal: V
+    t: float
+    material: Material
+    valid: bool
+
+  Material = tuple[color: Pixel]
+
+  Sphere = object
+    pos: V
+    radius: float
+    material: Material
+
+  Ray = object
+    origin: V
+    direction: V
+
+  World* = object
+    spheres: seq[Sphere]
+    skycolor: Pixel
+    sundir: V
   #
   Pixel = V
   Image = array[IMAGE_SIZE.width, array[IMAGE_SIZE.height, Pixel]]
@@ -79,7 +98,7 @@ func empty_hit(): Hit =
   return hit
 
 func make_ray(origin: V, direction: V): Ray =
-  (origin: origin, direction: v_normalize(direction))
+  Ray(origin: origin, direction: v_normalize(direction))
 
 func ray_vs_sphere(ray: Ray, sphere: Sphere): Hit =
   let
@@ -96,8 +115,9 @@ func ray_vs_sphere(ray: Ray, sphere: Sphere): Hit =
         else: t_b
     at = v_add(ray.origin, v_scale(ray.direction, t))
     normal = v_normalize(v_sub(sphere.pos, at))
+    material = sphere.material
     valid = t > 0.0
-  return (at, normal, t, valid)
+  return Hit(at: at, normal: normal, t: t, material: material, valid: valid)
 
 
 # Math
@@ -127,7 +147,7 @@ proc write_image(image: Image) =
       f.write "   "
     f.write "\n"
 
-proc generate_ray(xi: int, yI: int): Ray =
+proc generate_ray(xi: int, yi: int): Ray =
   let
     jitter = v_scale(v_random_direction(), 1.0 / float(IMAGE_SIZE.width +
         IMAGE_SIZE.height))
@@ -136,16 +156,30 @@ proc generate_ray(xi: int, yI: int): Ray =
     z = -1.0
   return make_ray(v_zero(), v_add((x, y, z), jitter))
 
+func sample(ray: Ray, world: World): Pixel =
+  var closest_hit = empty_hit()
+  for s in world.spheres:
+    let hit = ray_vs_sphere(ray, s)
+    if hit.valid and hit.t < closest_hit.t or not closest_hit.valid:
+      closest_hit = hit
+  return if not closest_hit.valid:
+    world.skycolor
+  else:
+    let l = clamp(v_dot(world.sundir, closest_hit.normal), 0.0, 1.0)
+    v_scale(closest_hit.material.color, l)
+
+
 proc main() =
   var
     image: Image
 
   let
-    sphere = (pos: (1.0, 0.0, -5.0), radius: 2.0)
-
-    sun_dir = v_normalize((1.0, 1.0, -1.0))
-    sky_color = (0.2, 0.2, 0.2)
-    sphere_color = (1.0, 0.0, 0.0)
+    sphere = Sphere(pos: (1.0, 0.0, -5.0), radius: 2.0, material: (color: (
+        1.0, 0.0, 0.0)))
+    world = World(
+        spheres: @[sphere],
+        skycolor: (0.2, 0.2, 0.2),
+        sundir: v_normalize((1.0, 1.0, -1.0)))
 
   echo "Rendering file"
   for xi in 0..IMAGE_SIZE.width-1:
@@ -154,16 +188,8 @@ proc main() =
       var
         current: Pixel
       for s in 0..NUM_SAMPLES-1:
-        let
-          ray = generate_ray(xi, yi)
-          hit = ray_vs_sphere(ray, sphere)
-          c = if hit.valid:
-                let
-                  l = clamp(v_dot(sun_dir, hit.normal), 0.0, 1.0)
-                v_scale(hit.normal, l)
-              else:
-                sky_color
-        current = v_add(current, c)
+        let ray = generate_ray(xi, yi)
+        current = v_add(sample(ray, world), current)
       image[xi][yi] = v_scale(current, 1.0 / float(NUM_SAMPLES))
 
   echo "Writing file"
