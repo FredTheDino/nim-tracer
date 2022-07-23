@@ -2,6 +2,27 @@ import strformat
 import std/math
 import std/random
 
+import macros
+
+# https://stackoverflow.com/questions/47443206/how-to-debug-print-a-variable-name-and-its-value-in-nim#47443207
+macro debug*(n: varargs[typed]): untyped =
+  result = newNimNode(nnkStmtList, n)
+  for i in 0..n.len-1:
+    if n[i].kind == nnkStrLit:
+      # pure string literals are written directly
+      result.add(newCall("write", newIdentNode("stdout"), n[i]))
+    else:
+      # other expressions are written in <expression>: <value> syntax
+      result.add(newCall("write", newIdentNode("stdout"), toStrLit(n[i])))
+      result.add(newCall("write", newIdentNode("stdout"), newStrLitNode(": ")))
+      result.add(newCall("write", newIdentNode("stdout"), n[i]))
+    if i != n.len-1:
+      # separate by ", "
+      result.add(newCall("write", newIdentNode("stdout"), newStrLitNode(", ")))
+    else:
+      # add newline
+      result.add(newCall("writeLine", newIdentNode("stdout"), newStrLitNode("")))
+
 # Things to do
 #  - [x] Generate an image
 #  - [x] Write image to file
@@ -13,8 +34,8 @@ import std/random
 #  - Better color combining
 
 const
-  IMAGE_SIZE = (width: 300, height: 300)
-  NUM_SAMPLES = 10
+  IMAGE_SIZE = (width: 300, height: 200)
+  NUM_SAMPLES = 300
 
 type
   V = tuple[x: float, y: float, z: float]
@@ -26,11 +47,19 @@ type
     material: Material
     valid: bool
 
-  Material = tuple[color: Pixel]
+  Material = object
+    color: Pixel
+    roughness: float
+    emitter: float
 
   Sphere = object
     pos: V
     radius: float
+    material: Material
+  
+  Plane = object
+    pos: V
+    normal: V
     material: Material
 
   Ray = object
@@ -39,11 +68,11 @@ type
 
   World* = object
     spheres: seq[Sphere]
+    planes: seq[Plane]
     skycolor: Pixel
-    sundir: V
   #
   Pixel = V
-  Image = array[IMAGE_SIZE.width, array[IMAGE_SIZE.height, Pixel]]
+  Image = array[IMAGE_SIZE.height, array[IMAGE_SIZE.width, Pixel]]
 
 # Vector
 func v_unit(): V =
@@ -67,6 +96,9 @@ func v_sub(a: V, b: V): V =
 func v_dot(a: V, b: V): float =
   a.x * b.x + a.y * b.y + a.z * b.z
 
+func v_mix(a: V, b: V, s: float): V =
+  v_add(v_scale(a, 1.0 - s), v_scale(b, s))
+
 func v_prod(a: V, b: V): V =
   (a.x * b.x, a.y * b.y, a.z * b.z)
 
@@ -75,6 +107,9 @@ func v_length_sq(a: V): float =
 
 func v_length(a: V): float =
   sqrt(v_length_sq(a))
+
+func v_reflect(a: V, n: V): V =
+  v_add(a, v_scale(n, v_dot(a, n) * -2.0))
 
 func v_normalize(a: V): V =
   v_scale(a, 1.0 / v_length(a))
@@ -95,6 +130,7 @@ func empty_hit(): Hit =
   var
     hit: Hit
   hit.valid = false
+  hit.t = 100000.0
   return hit
 
 func make_ray(origin: V, direction: V): Ray =
@@ -114,11 +150,34 @@ func ray_vs_sphere(ray: Ray, sphere: Sphere): Hit =
     t = if t_a > 0: t_a
         else: t_b
     at = v_add(ray.origin, v_scale(ray.direction, t))
-    normal = v_normalize(v_sub(sphere.pos, at))
+    normal = v_normalize(v_sub(at, sphere.pos))
     material = sphere.material
     valid = t > 0.0
   return Hit(at: at, normal: normal, t: t, material: material, valid: valid)
 
+proc ray_vs_plane(ray: Ray, plane: Plane): Hit =
+  let
+    op = v_sub(ray.origin, plane.pos)
+    d = v_dot(op, plane.normal)
+    t = 1.0 / v_dot(ray.direction, plane.normal) * d
+  if t < 0.01:
+    return empty_hit()
+  let
+    at = v_add(ray.origin, v_scale(ray.direction, t))
+    normal = v_neg(plane.normal)
+    material = plane.material
+    valid = t > 0
+  return Hit(at: at, normal: normal, t: t, material: material, valid: valid)
+
+proc ray_bounce(ray: Ray, hit: Hit): Ray =
+  let
+    reflection = v_normalize(v_reflect(ray.direction, hit.normal))
+    random_dir = v_random_direction()
+    refraction = if v_dot(hit.normal, random_dir) > 0: random_dir
+                 else: v_neg(random_dir)
+    direction = v_normalize(v_mix(reflection, refraction, hit.material.roughness))
+    origin = v_add(hit.at, v_scale(hit.normal, 0.00001))
+  Ray(origin: origin, direction: direction)
 
 # Math
 func clamp*[T](a: T, lo: T, hi: T): T =
@@ -149,24 +208,43 @@ proc write_image(image: Image) =
 
 proc generate_ray(xi: int, yi: int): Ray =
   let
-    jitter = v_scale(v_random_direction(), 1.0 / float(IMAGE_SIZE.width +
-        IMAGE_SIZE.height))
-    x = 2.0 * float(xi) / float(IMAGE_SIZE.width) - 1.0
-    y = 2.0 * float(yi) / float(IMAGE_SIZE.height) - 1.0
+    t = rand(PI)
+    w = 1.0 / float(IMAGE_SIZE.width + IMAGE_SIZE.height)
+    jitter = v_scale((cos(t), sin(t), 0.0), w)
+    #
+    r = float(IMAGE_SIZE.width) / (float(IMAGE_SIZE.width) * float(IMAGE_SIZE.height))
+    x = r * (float(xi) - (IMAGE_SIZE.width / 2))
+    y = r * (float(yi) - (IMAGE_SIZE.height / 2))
     z = -1.0
   return make_ray(v_zero(), v_add((x, y, z), jitter))
 
-func sample(ray: Ray, world: World): Pixel =
+proc sample(ray: Ray, world: World, bounces: int): Pixel =
+  if bounces == 0:
+    return v_zero()
   var closest_hit = empty_hit()
+  #
   for s in world.spheres:
     let hit = ray_vs_sphere(ray, s)
+    if hit.valid and hit.t < closest_hit.t:
+      closest_hit = hit
+  #
+  for p in world.planes:
+    let hit = ray_vs_plane(ray, p)
     if hit.valid and hit.t < closest_hit.t or not closest_hit.valid:
       closest_hit = hit
+  #
   return if not closest_hit.valid:
     world.skycolor
   else:
-    let l = clamp(v_dot(world.sundir, closest_hit.normal), 0.0, 1.0)
-    v_scale(closest_hit.material.color, l)
+    let
+      hit = closest_hit
+      next_ray = ray_bounce(ray, hit)
+      next_sample = sample(next_ray, world, bounces - 1)
+    v_mix( v_prod(v_scale(next_sample, 0.95), hit.material.color)
+         , hit.material.color
+         , hit.material.emitter
+         )
+          
 
 
 proc main() =
@@ -174,23 +252,40 @@ proc main() =
     image: Image
 
   let
-    sphere = Sphere(pos: (1.0, 0.0, -5.0), radius: 2.0, material: (color: (
-        1.0, 0.0, 0.0)))
+    sphere = Sphere(
+        pos: (-2.0, -0.4, -8.0),
+        radius: 2.0,
+        material: Material(roughness: 0.0, color: (1.0, 1.0, 0.0), emitter: 0.0))
+
+    sun = Sphere(
+        pos: (2.0, -0.4, -8.0),
+        radius: 1.0,
+        material: Material(roughness: 1.0, color: (10.0, 0.0, 10.0), emitter: 0.5))
+
+    moon = Sphere(
+        pos: (0.0, -20.0, -8.0),
+        radius: 10.0,
+        material: Material(roughness: 0.0, color: (5.0, 5.0, 5.0), emitter: 0.5))
+
+    plane = Plane(
+        pos: (0.0, -1.5, 0.0),
+        normal: (0.0, 1.0, 0.0),
+        material: Material(roughness: 1.0, color: (1.0, 1.0, 1.0), emitter: 0.0))
     world = World(
-        spheres: @[sphere],
-        skycolor: (0.2, 0.2, 0.2),
-        sundir: v_normalize((1.0, 1.0, -1.0)))
+        spheres: @[sphere, sun, moon],
+        planes: @[plane],
+        skycolor: (0.0, 0.0, 0.0)
+    )
 
   echo "Rendering file"
   for xi in 0..IMAGE_SIZE.width-1:
     for yi in 0..IMAGE_SIZE.height-1:
 
-      var
-        current: Pixel
+      var current: Pixel
       for s in 0..NUM_SAMPLES-1:
         let ray = generate_ray(xi, yi)
-        current = v_add(sample(ray, world), current)
-      image[xi][yi] = v_scale(current, 1.0 / float(NUM_SAMPLES))
+        current = v_add(sample(ray, world, 500), current)
+      image[yi][xi] = v_scale(current, 1.0 / float(NUM_SAMPLES))
 
   echo "Writing file"
   write_image(image)
