@@ -24,7 +24,7 @@ type
   Ray = tuple[origin: V, direction: V]
   #
   Pixel = V
-  Image = array[IMAGE_SIZE.width, array[IMAGE_SIZE.height, Pixel]] 
+  Image = array[IMAGE_SIZE.width, array[IMAGE_SIZE.height, Pixel]]
 
 # Vector
 func v_unit(): V =
