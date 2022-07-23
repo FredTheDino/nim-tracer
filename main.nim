@@ -127,6 +127,15 @@ proc write_image(image: Image) =
       f.write "   "
     f.write "\n"
 
+proc generate_ray(xi: int, yI: int): Ray =
+  let
+    jitter = v_scale(v_random_direction(), 1.0 / float(IMAGE_SIZE.width +
+        IMAGE_SIZE.height))
+    x = 2.0 * float(xi) / float(IMAGE_SIZE.width) - 1.0
+    y = 2.0 * float(yi) / float(IMAGE_SIZE.height) - 1.0
+    z = -1.0
+  return make_ray(v_zero(), v_add((x, y, z), jitter))
+
 proc main() =
   var
     image: Image
@@ -146,8 +155,7 @@ proc main() =
         current: Pixel
       for s in 0..NUM_SAMPLES-1:
         let
-          jitter = v_scale(v_random_direction(), 1.0 / float(IMAGE_SIZE.width + IMAGE_SIZE.height))
-          ray = make_ray(v_zero(), v_add((x: 2.0 * float(xi) / float(IMAGE_SIZE.width) - 1.0, y: 2.0 * float(yi) / float(IMAGE_SIZE.height) - 1.0, z: -1.0), jitter))
+          ray = generate_ray(xi, yi)
           hit = ray_vs_sphere(ray, sphere)
           c = if hit.valid:
                 let
