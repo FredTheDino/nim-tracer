@@ -13,7 +13,7 @@ import std/random
 #  - Better color combining
 
 const
-  IMAGE_SIZE = (width: 100, height: 100)
+  IMAGE_SIZE = (width: 200, height: 200)
   NUM_SAMPLES = 100
 
 type
