@@ -5,7 +5,7 @@ import std/random
 # Things to do
 #  - [x] Generate an image
 #  - [x] Write image to file
-#  - [»] Generate funky images?
+#  - [x] Generate funky images?
 #  - Ray plane intersection
 #  - [x] Ray sphere intersection
 #  - BOUNCES!
